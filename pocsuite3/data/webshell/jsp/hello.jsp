@@ -1,0 +1,1 @@
+<% out.println("Hello,this is a document.So whassup this weekend.I gonna go hiking."); %>
