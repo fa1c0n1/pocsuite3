@@ -1,8 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-# @Time    : 2018/12/25 上午10:58
-# @Author  : chenghs
-# @File    : interpreter.py
+# pylint: disable=E0202
 import os
 import re
 import chardet
@@ -11,7 +7,7 @@ from termcolor import colored
 
 from pocsuite3.lib.controller.controller import start
 from pocsuite3.lib.core.common import banner, index_modules, data_to_stdout, module_required, \
-    get_poc_name, stop_after, get_local_ip, is_ipv6_address_format, rtrim, ltrim, exec_cmd
+    get_poc_name, stop_after, get_local_ip, is_ipv6_address_format, rtrim, ltrim, exec_cmd, get_file_text
 from pocsuite3.lib.core.data import logger, paths, kb, conf
 from pocsuite3.lib.core.enums import POC_CATEGORY, AUTOCOMPLETE_TYPE
 from pocsuite3.lib.core.exception import PocsuiteBaseException, PocsuiteShellQuitException
@@ -80,6 +76,19 @@ class BaseInterpreter(object):
 
         while True:
             try:
+                '''
+                # BUG
+                https://github.com/knownsec/pocsuite3/issues/317
+                https://stackoverflow.com/questions/52102240/how-to-apply-coloring-formatting-to-the-displayed-text-in-input-function-simi
+
+                colorama works by replacing sys.stdout and sys.stderr with versions that interpret ISO 6429 sequences,
+                make appropriate Win32 calls to implement them,
+                and send the rest of the characters on to the underlying stream.
+                This explains your observations: input doesn’t use the Python-level sys.stdout.write,
+                and Spyder interprets the sequences itself but is unaffected by the Win32 calls.
+
+                The only reasonable fix seems to be to use input with no prompt :(
+                '''
                 self.input_command, self.input_args = self.parse_line(input(self.prompt))
                 command = self.input_command.lower()
                 if not command:
@@ -206,10 +215,11 @@ class PocsuiteInterpreter(BaseInterpreter):
         self.__parse_prompt()
 
     def __parse_prompt(self):
-        raw_prompt_default_template = "\001\033[4m\002{host}\001\033[0m\002 > "
-        self.raw_prompt_template = raw_prompt_default_template
-        module_prompt_default_template = "\001\033[4m\002{host}\001\033[0m\002 (\001\033[91m\002{module}\001\033[0m\002) > "
-        self.module_prompt_template = module_prompt_default_template
+        host_colorizing = colored("{host}", attrs=['underline'])
+        self.raw_prompt_template = f'{host_colorizing} > '
+
+        # LIGHTRED_EX=91 are fairly well supported, but not part of the standard.
+        self.module_prompt_template = host_colorizing + " (\033[91m{module}\033[0m) > "
 
     @property
     def module_metadata(self):
@@ -311,19 +321,34 @@ class PocsuiteInterpreter(BaseInterpreter):
                 logger.warning("Index out of range")
                 return
             module_path = self.last_search[index]
-        if not module_path.endswith(".py"):
-            module_path = module_path + ".py"
-        if not os.path.exists(module_path):
-            module_path = os.path.join(self.module_parent_directory, module_path)
-            if not os.path.exists(module_path):
-                errMsg = "No such file: '{0}'".format(module_path)
-                logger.error(errMsg)
-                return
+
+        module_ext = ''
+        module_path_found = False
+        for module_ext in ['', '.py', '.yaml']:
+            if os.path.exists(module_path + module_ext):
+                module_path_found = True
+                module_path = module_path + module_ext
+                break
+            elif os.path.exists(os.path.join(self.module_parent_directory, module_path + module_ext)):
+                module_path_found = True
+                module_path = os.path.join(self.module_parent_directory, module_path + module_ext)
+                break
+
+        if not module_path_found:
+            err_msg = "No such file: '{0}'".format(module_path)
+            logger.error(err_msg)
+            return
+
+        if module_ext == '':
+            if module_path.endswith('.py'):
+                module_ext = '.py'
+            elif module_path.endswith('.yaml'):
+                module_ext = '.yaml'
         try:
             load_file_to_module(module_path)
             self.current_module = kb.current_poc
-            self.current_module.pocsuite3_module_path = ltrim(
-                rtrim(module_path, ".py"), self.module_parent_directory)
+            self.current_module.pocsuite3_module_path = ltrim(rtrim(module_path, module_ext),
+                                                              self.module_parent_directory)
         except Exception as err:
             logger.error(str(err))
 
@@ -362,11 +387,7 @@ class PocsuiteInterpreter(BaseInterpreter):
         else:
             rhost = self.current_module.getg_option("rhost")
             rport = self.current_module.getg_option("rport")
-            ssl = self.current_module.getg_option("ssl")
-            scheme = "http"
-            if ssl:
-                scheme = "https"
-            target = "{scheme}://{rhost}:{rport}".format(scheme=scheme, rhost=rhost, rport=rport)
+            target = f"{rhost}:{rport}"
         conf.mode = mod
         kb.task_queue.put((target, self.current_module))
         try:
@@ -447,8 +468,9 @@ class PocsuiteInterpreter(BaseInterpreter):
         index = 0
         for tmp_module in self.main_modules_dirs:
             found = os.path.join(self.module_parent_directory, tmp_module + ".py")
-            with open(found, encoding='utf-8') as f:
-                code = f.read()
+            if not os.path.exists(found):
+                found = os.path.join(self.module_parent_directory, tmp_module + ".yaml")
+            code = get_file_text(found)
             name = get_poc_name(code)
             tb.add_row([str(index), tmp_module, name])
             search_result.append(tmp_module)
@@ -516,7 +538,7 @@ class PocsuiteInterpreter(BaseInterpreter):
                 if opt.require and value == "":
                     value = colored("*require*", "red")
                 tb3.add_row([name, value, opt.type, opt.description])
-            data_to_stdout("\nExploit payloads(using reverse tcp):\n")
+            data_to_stdout("\nPayload options (reverse_tcp):\n")
             data_to_stdout(tb3.get_string())
             data_to_stdout("\n")
 

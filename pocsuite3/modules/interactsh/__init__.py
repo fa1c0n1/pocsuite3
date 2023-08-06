@@ -5,21 +5,33 @@ import base64
 import json
 import random
 import time
-from uuid import uuid4
 from base64 import b64encode
+from uuid import uuid4
+
 from Cryptodome.Cipher import AES, PKCS1_OAEP
-from Cryptodome.PublicKey import RSA
 from Cryptodome.Hash import SHA256
-from pocsuite3.api import requests, logger, random_str
+from Cryptodome.PublicKey import RSA
+
+from pocsuite3.lib.core.data import conf, logger
+from pocsuite3.lib.request import requests
+from pocsuite3.lib.utils import random_str
 
 
 class Interactsh:
-    def __init__(self, token='', server=''):
+    def __init__(self, server='', token=''):
         rsa = RSA.generate(2048)
         self.public_key = rsa.publickey().exportKey()
         self.private_key = rsa.exportKey()
+
+        self.server = server.lstrip('.')
+        if 'oob_server' in conf:
+            self.server = self.server or conf.oob_server
+        self.server = self.server or 'oast.me'
+
         self.token = token
-        self.server = server.lstrip('.') or 'interact.sh'
+        if 'oob_token' in conf:
+            self.token = self.token or conf.oob_token
+
         self.headers = {
             "Content-Type": "application/json",
         }
@@ -42,10 +54,16 @@ class Interactsh:
             "secret-key": self.secret,
             "correlation-id": self.correlation_id
         }
-        res = self.session.post(
-            f"https://{self.server}/register", headers=self.headers, json=data, verify=False)
-        if 'success' not in res.text:
-            logger.error(res.text)
+        msg = f"[PLUGIN] Interactsh: Can not initiate {self.server} DNS callback client"
+        try:
+            res = self.session.post(
+                f"http://{self.server}/register", headers=self.headers, json=data, verify=False)
+            if res.status_code == 401:
+                logger.error("[PLUGIN] Interactsh: auth error")
+            elif 'success' not in res.text:
+                logger.error(msg)
+        except requests.RequestException:
+            logger.error(msg)
 
     def poll(self):
         count = 3
@@ -53,15 +71,14 @@ class Interactsh:
         while count:
 
             try:
-                url = f"https://{self.server}/poll?id={self.correlation_id}&secret={self.secret}"
+                url = f"http://{self.server}/poll?id={self.correlation_id}&secret={self.secret}"
                 res = self.session.get(url, headers=self.headers, verify=False).json()
                 aes_key, data_list = res['aes_key'], res['data']
                 for i in data_list:
                     decrypt_data = self.decrypt_data(aes_key, i)
                     result.append(decrypt_data)
                 return result
-            except Exception as e:
-                logger.debug(e)
+            except Exception:
                 count -= 1
                 time.sleep(1)
                 continue
@@ -78,7 +95,7 @@ class Interactsh:
         plain_text = cryptor.decrypt(decode)
         return json.loads(plain_text[16:])
 
-    def build_request(self, length=10, method='https'):
+    def build_request(self, length=10, method='http'):
         """
         Generate the url and flag for verification
 

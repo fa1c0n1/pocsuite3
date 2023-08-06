@@ -8,6 +8,7 @@ import random
 from faker import Faker
 from socket import gethostbyname
 import urllib.parse
+from ipaddress import ip_address
 from pocsuite3.lib.core.data import logger, paths
 from pocsuite3.lib.core.enums import (
     CUSTOM_LOGGING, OS, OS_ARCH, SHELLCODE_CONNECTION
@@ -18,8 +19,18 @@ from pocsuite3.shellcodes import OSShellcodes
 
 
 def urlparse(address):
+    # https://stackoverflow.com/questions/50499273/urlparse-fails-with-simple-url
+    try:
+        ip = ip_address(address)
+        if ip.version == 4:
+            return urllib.parse.urlparse(f'tcp://{address}')
+        elif ip.version == 6:
+            return urllib.parse.urlparse(f'tcp://[{address}]')
+    except ValueError:
+        pass
+
     if not re.search(r'^[A-Za-z0-9+.\-]+://', address):
-        address = 'tcp://{0}'.format(address)
+        address = f'tcp://{address}'
     return urllib.parse.urlparse(address)
 
 
@@ -98,7 +109,7 @@ def generate_shellcode_list(listener_ip, listener_port, os_target=OS.WINDOWS, os
     filepath = os.path.join(paths.POCSUITE_TMP_PATH, filename)
     if os_target == OS.WINDOWS:
         filepath = os.path.join(paths.POCSUITE_TMP_PATH, filename) + '.exe'
-    shellcode = s.create_shellcode(
+    _ = s.create_shellcode(
         connection_type,
         encode='',
         make_exe=1,
@@ -268,3 +279,16 @@ def gen_cert(countryName='',
         hard_coded_cert = base64.b64decode(hard_coded_cert_base64)
         with open(filepath, "wb+") as fw:
             fw.write(hard_coded_cert)
+
+
+def minimum_version_required(ver):
+    from pocsuite3 import __version__
+    from pkg_resources import parse_version
+    v1, v2 = parse_version(ver), parse_version(__version__)
+    if v1 > v2:
+        logger.warning(f'The minimum version required for this PoC plugin is {ver}, '
+                       f'you installed {__version__}, please consider upgrading pocsuite3.')
+        from pocsuite3.lib.core.data import conf
+        from pocsuite3.lib.core.update import update
+        conf.update_all = True
+        update()

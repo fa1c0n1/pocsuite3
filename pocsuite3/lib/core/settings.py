@@ -93,9 +93,7 @@ LOCAL_IP_ADDRESS_REGEX = (
 
 POC_REQUIRES_REGEX = r"install_requires\s*=\s*\[(?P<result>.*?)\]"
 
-POC_NAME_REGEX = r"""(?sm)POCBase\):.*?name\s*=\s*['"](?P<result>.*?)['"]"""
-
-MAX_NUMBER_OF_THREADS = 20
+MAX_NUMBER_OF_THREADS = 200
 
 DEFAULT_LISTENER_PORT = 6666
 
@@ -113,8 +111,11 @@ CMD_PARSE_WHITELIST = [
     "help",
     "version",
     "update",
+    "new",
     "url",
     "url_file",
+    "ports",
+    "skip_target_port",
     "file",
     "poc_keyword",
     "verify",
@@ -130,20 +131,25 @@ CMD_PARSE_WHITELIST = [
     "retry",
     "delay",
     "headers",
-    "login-user",
-    "login-pass",
+    "ceye-token",
+    "oob-server",
+    "oob-token",
+    "seebug-token",
+    "zoomeye-token",
     "shodan-token",
     "fofa-user",
     "fofa-token",
     "quake-token",
+    "hunter-token",
     "censys-uid",
     "censys-secret",
     "dork",
     "dork-zoomeye",
     "dork-shodan",
-    "dork-censys",
     "dork-fofa",
     "dork-quake",
+    "dork-hunter",
+    "dork-censys",
     "max-page",
     "search-type",
     "vul-keyword",
@@ -153,6 +159,7 @@ CMD_PARSE_WHITELIST = [
     "tls",
     "comparison",
     "dork-b64",
+    "output_path",
     "plugins",
     "pocs-path",
     "threads",
@@ -164,6 +171,7 @@ CMD_PARSE_WHITELIST = [
     "rule",
     "rule-req",
     "rule-filename",
+    "no-check",
     "options",
 
     # other
