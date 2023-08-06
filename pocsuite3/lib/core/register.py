@@ -4,7 +4,7 @@ import importlib.machinery
 import importlib.util
 from importlib.abc import Loader
 from pocsuite3.lib.core.common import (
-    multiple_replace, get_filename, get_md5,
+    multiple_replace, get_filename, get_md5, get_file_text,
     is_pocsuite3_poc, get_poc_requires, get_poc_name)
 from pocsuite3.lib.core.data import kb
 from pocsuite3.lib.core.data import logger
@@ -30,8 +30,7 @@ class PocLoader(Loader):
             else:
                 data = self.data
         else:
-            with open(filename, encoding='utf-8') as f:
-                code = f.read()
+            code = get_file_text(filename)
             if not is_pocsuite3_poc(code):
                 data = multiple_replace(code, POC_IMPORTDICT)
             else:
@@ -69,6 +68,12 @@ class PocLoader(Loader):
     def exec_module(self, module):
         filename = self.get_filename(self.fullname)
         poc_code = self.get_data(filename)
+
+        # convert yaml template to pocsuite3 poc script
+        if filename.endswith('.yaml') and re.search(r'matchers:\s+-', poc_code):
+            from pocsuite3.lib.yaml.nuclei import Nuclei
+            poc_code = str(Nuclei(poc_code))
+
         self.check_requires(poc_code)
         obj = compile(poc_code, filename, 'exec', dont_inherit=True, optimize=-1)
         try:

@@ -6,6 +6,8 @@ optDict = {
     'Target': {
         'url': 'string',
         'url_file': 'string',
+        'ports': 'string',
+        'skip_target_port': 'boolean',
         'poc': 'string',
         'poc_keyword': 'string',
         'configFile': 'string'
@@ -20,18 +22,22 @@ optDict = {
         'agent': 'string',
         'proxy': 'string',
         'proxy_cred': 'string',
-        'timeout': 'string',
-        'retry': 'float',
+        'timeout': 'float',
+        'retry': 'integer',
         'delay': 'string',
         'headers': 'string'
     },
     'Account': {
-        'login_user': 'string',
-        'login_pass': 'string',
+        'ceye_token': 'string',
+        'oob_server': 'string',
+        'oob_token': 'string',
+        'seebug_token': 'string',
+        'zoomeye_token': 'string',
         'shodan_token': 'string',
         'fofa_user': 'string',
         'fofa_token': 'string',
         'quake_token': 'string',
+        'hunter_token': 'string',
         'censys_uid': 'string',
         'censys_secret': 'string'
     },
@@ -39,9 +45,10 @@ optDict = {
         'dork': 'string',
         'dork_zoomeye': 'string',
         'dork_shodan': 'string',
-        'dork_censys': 'string',
         'dork_fofa': 'string',
         'dork_quake': 'string',
+        'dork_hunter': 'string',
+        'dork_censys': 'string',
         'max_page': 'integer',
         'search_type': 'string',
         'vul_keyword': 'string',
@@ -53,6 +60,7 @@ optDict = {
         'dork_b64': 'boolean'
     },
     'Optimization': {
+        'output_path': 'string',
         'plugins': 'string',
         'pocs_path': 'string',
         'threads': 'integer',
@@ -63,7 +71,8 @@ optDict = {
         'pcap': 'boolean',
         'rule': 'boolean',
         'rule_req': 'boolean',
-        'rule_filename': 'string'
+        'rule_filename': 'string',
+        'no_check': 'boolean'
     },
     'Poc options': {
         'show_options': 'boolean'

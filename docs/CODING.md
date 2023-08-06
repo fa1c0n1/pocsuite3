@@ -1,3 +1,5 @@
+# This document has stopped maintenance, please move to https://pocsuite.org
+
 Pocsuite3 开发文档及 PoC 编写规范及要求说明
 ---
 * [概述](#overview)
@@ -136,7 +138,7 @@ from pocsuite3.api import get_listener_ip, get_listener_port
 from pocsuite3.api import REVERSE_PAYLOAD
 from pocsuite3.lib.utils import random_str
 
-  class DemoPOC(POCBase):
+class DemoPOC(POCBase):
     ...
 ```
 

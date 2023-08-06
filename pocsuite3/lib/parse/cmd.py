@@ -24,7 +24,9 @@ def cmd_line_parser(argv=None):
                             help="Show program's version number and exit")
 
         parser.add_argument("--update", dest="update_all", action="store_true",
-                            help="Update Pocsuite")
+                            help="Update Pocsuite3")
+
+        parser.add_argument("-n", "--new", dest="new", action="store_true", help="Create a PoC template")
 
         parser.add_argument("-v", dest="verbose", type=int, default=1, choices=list(range(7)),
                             help="Verbosity level: 0-6 (default 1)")
@@ -33,9 +35,14 @@ def cmd_line_parser(argv=None):
         target = parser.add_argument_group('Target', "At least one of these "
                                                      "options has to be provided to define the target(s)")
         target.add_argument("-u", "--url", dest="url", nargs='+',
-                            help="Target URL (e.g. \"http://www.site.com/vuln.php?id=1\")")
+                            help="Target URL/CIDR (e.g. \"http://www.site.com/vuln.php?id=1\")")
 
-        target.add_argument("-f", "--file", dest="url_file", help="Scan multiple targets given in a textual file")
+        target.add_argument("-f", "--file", dest="url_file",
+                            help="Scan multiple targets given in a textual file (one per line)")
+        target.add_argument("-p", "--ports", dest="ports",
+                            help="add additional port to each target ([proto:]port, e.g. 8080,https:10000)")
+        target.add_argument("-s", dest="skip_target_port", action="store_true",
+                            help="Skip target's port, only use additional port")
         target.add_argument("-r", dest="poc", nargs='+', help="Load PoC file from local or remote from seebug website")
         target.add_argument("-k", dest="poc_keyword", help="Filter PoC by keyword, e.g. ecshop")
         target.add_argument("-c", dest="configFile", help="Load options from a configuration INI file")
@@ -56,40 +63,51 @@ def cmd_line_parser(argv=None):
         request.add_argument("--host", dest="host", help="HTTP Host header value")
         request.add_argument("--referer", dest="referer", help="HTTP Referer header value")
         request.add_argument("--user-agent", dest="agent", help="HTTP User-Agent header value (default random)")
-        request.add_argument("--proxy", dest="proxy", help="Use a proxy to connect to the target URL")
+        request.add_argument("--proxy", dest="proxy",
+                             help="Use a proxy to connect to the target URL (protocol://host:port)")
         request.add_argument("--proxy-cred", dest="proxy_cred", help="Proxy authentication credentials (name:password)")
-        request.add_argument("--timeout", dest="timeout", help="Seconds to wait before timeout connection (default 30)")
-        request.add_argument("--retry", dest="retry", default=False, help="Time out retrials times")
+        request.add_argument("--timeout", dest="timeout", type=float, default=10,
+                             help="Seconds to wait before timeout connection (default 10)")
+        request.add_argument("--retry", dest="retry", type=int, default=0, help="Time out retrials times (default 0)")
         request.add_argument("--delay", dest="delay", help="Delay between two request of one thread")
         request.add_argument("--headers", dest="headers", help="Extra headers (e.g. \"key1: value1\\nkey2: value2\")")
         # Account options
-        group = parser.add_argument_group("Account", "Telnet404, Shodan, CEye, Fofa account options")
-        group.add_argument("--login-user", dest="login_user", help="Telnet404 login user")
-        group.add_argument("--login-pass", dest="login_pass", help="Telnet404 login password")
+        group = parser.add_argument_group("Account", "Account options")
+        group.add_argument("--ceye-token", dest="ceye_token", help="CEye token")
+        group.add_argument("--oob-server", dest="oob_server",
+                           help="Interactsh server to use (default \"interact.sh\")")
+        group.add_argument("--oob-token", dest="oob_token",
+                           help="Authentication token to connect protected interactsh server")
+        group.add_argument("--seebug-token", dest="seebug_token", help="Seebug token")
+        group.add_argument("--zoomeye-token", dest="zoomeye_token", help="ZoomEye token")
         group.add_argument("--shodan-token", dest="shodan_token", help="Shodan token")
-        group.add_argument("--fofa-user", dest="fofa_user", help="fofa user")
-        group.add_argument("--fofa-token", dest="fofa_token", help="fofa token")
-        group.add_argument("--quake-token", dest="quake_token", help="quake token")
+        group.add_argument("--fofa-user", dest="fofa_user", help="Fofa user")
+        group.add_argument("--fofa-token", dest="fofa_token", help="Fofa token")
+        group.add_argument("--quake-token", dest="quake_token", help="Quake token")
+        group.add_argument("--hunter-token", dest="hunter_token", help="Hunter token")
         group.add_argument("--censys-uid", dest="censys_uid", help="Censys uid")
         group.add_argument("--censys-secret", dest="censys_secret", help="Censys secret")
         # Modules options
-        modules = parser.add_argument_group("Modules", "Modules(Seebug, Zoomeye, CEye, Fofa, Quake, Listener) options")
+        modules = parser.add_argument_group(
+            "Modules", "Modules options")
         modules.add_argument("--dork", dest="dork", action="store", default=None,
                              help="Zoomeye dork used for search")
         modules.add_argument("--dork-zoomeye", dest="dork_zoomeye", action="store", default=None,
                              help="Zoomeye dork used for search")
         modules.add_argument("--dork-shodan", dest="dork_shodan", action="store", default=None,
                              help="Shodan dork used for search")
-        modules.add_argument("--dork-censys", dest="dork_censys", action="store", default=None,
-                             help="Censys dork used for search")
         modules.add_argument("--dork-fofa", dest="dork_fofa", action="store", default=None,
                              help="Fofa dork used for search")
         modules.add_argument("--dork-quake", dest="dork_quake", action="store", default=None,
                              help="Quake dork used for search")
+        modules.add_argument("--dork-hunter", dest="dork_hunter", action="store", default=None,
+                             help="Hunter dork used for search")
+        modules.add_argument("--dork-censys", dest="dork_censys", action="store", default=None,
+                             help="Censys dork used for search")
         modules.add_argument("--max-page", dest="max_page", type=int, default=1,
                              help="Max page used in search API")
         modules.add_argument("--search-type", dest="search_type", action="store", default='host',
-                             help="search type used in ZoomEye API, web or host")
+                             help="search type used in search API, web or host")
         modules.add_argument("--vul-keyword", dest="vul_keyword", action="store", default=None,
                              help="Seebug keyword used for search")
         modules.add_argument("--ssv-id", dest="ssvid", action="store", default=None,
@@ -109,12 +127,13 @@ def cmd_line_parser(argv=None):
 
         # Optimization options
         optimization = parser.add_argument_group("Optimization", "Optimization options")
+        optimization.add_argument("-o", "--output", dest="output_path", help="Output file to write (JSON Lines format)")
         optimization.add_argument("--plugins", dest="plugins", action="store", default=None,
                                   help="Load plugins to execute")
         optimization.add_argument("--pocs-path", dest="pocs_path", action="store", default=None,
                                   help="User defined poc scripts path")
-        optimization.add_argument("--threads", dest="threads", type=int, default=1,
-                                  help="Max number of concurrent network requests (default 1)")
+        optimization.add_argument("--threads", dest="threads", type=int, default=150,
+                                  help="Max number of concurrent network requests (default 150)")
         optimization.add_argument("--batch", dest="batch",
                                   help="Automatically choose defaut choice without asking")
         optimization.add_argument("--requires", dest="check_requires", action="store_true", default=False,
@@ -131,6 +150,8 @@ def cmd_line_parser(argv=None):
                                   help="only export request rule")
         optimization.add_argument("--rule-filename", dest="rule_filename", action="store", default=False,
                                   help="Specify the name of the export rule file")
+        optimization.add_argument("--no-check", dest="no_check", action="store_true", default=False,
+                                  help="Disable URL protocol correction and honeypot check")
         # Diy options
         diy = parser.add_argument_group("Poc options", "definition options for PoC")
         diy.add_argument("--options", dest="show_options", action="store_true", default=False,

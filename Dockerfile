@@ -1,19 +1,21 @@
-FROM ubuntu:bionic
+FROM ubuntu:22.04
 MAINTAINER Knownsec 404 Team
 
+ARG version
 env DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
     && apt-get install -y \
         python3 \
         python3-pip \
+        net-tools \
+        nload \
+        htop \
         tmux \
         vim \
         wget \
         curl \
         zsh \
-    && pip3 install --upgrade pip \
-    && python3 -m pip install --upgrade pocsuite3 \
     && apt-get install -y sudo \
     && useradd -m pocsuite3 \
     && passwd --delete --unlock pocsuite3 \
@@ -29,6 +31,8 @@ RUN sh -c "$(wget -O- https://raw.githubusercontent.com/13ph03nix/zsh-in-docker/
     && sudo apt-get autoremove -y \
     && sudo apt-get clean -y \
     && sudo rm -rf /var/lib/apt/lists/*
+
+RUN sudo pip3 install --upgrade pip && sudo pip3 install --upgrade pocsuite3$([ -n "$version" ] && echo "=="${version})
 
 WORKDIR /home/pocsuite3
 CMD ["zsh"]

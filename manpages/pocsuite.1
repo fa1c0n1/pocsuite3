@@ -1,8 +1,8 @@
-.TH POCSUITE "1" "June 2021" "Manual page for pocsuite"
+.TH POCSUITE "1" "Nov 2022" "Manual page for pocsuite"
 .\"
-.\" 22st June 2021
+.\" Nov 3, 2022
 .\" Man page author:
-.\"   Tian Qiao <abcnsxyz@gmail.com>
+.\"   13ph03nix <abcnsxyz@gmail.com>
 .\"
 .SH NAME
 .I pocsuite3
@@ -33,7 +33,10 @@ show this help message and exit
 Show program's version number and exit
 .TP
 \fB\-\-update\fR
-Update Pocsuite
+Update Pocsuite3
+.TP
+\fB\-n\fR, \fB\-\-new\fR
+Create a PoC template
 .TP
 \fB\-v\fR {0,1,2,3,4,5,6}
 Verbosity level: 0\-6 (default 1)
@@ -42,10 +45,16 @@ Verbosity level: 0\-6 (default 1)
 At least one of these options has to be provided to define the target(s)
 .TP
 \fB\-u\fR URL [URL ...], \fB\-\-url\fR URL [URL ...]
-Target URL (e.g. "http://www.site.com/vuln.php?id=1")
+Target URL/CIDR (e.g. "http://www.site.com/vuln.php?id=1")
 .TP
 \fB\-f\fR URL_FILE, \fB\-\-file\fR URL_FILE
-Scan multiple targets given in a textual file
+Scan multiple targets given in a textual file (one per line)
+.TP
+\fB\-p\fR PORTS, \fB\-\-ports\fR PORTS
+add additional port to each target ([proto:]port, e.g. 8080,https:10000)
+.TP
+\fB\-s\fR
+Skip target's port, only use additional port
 .TP
 \fB\-r\fR POC [POC ...]
 Load POC file from local or remote from seebug website
@@ -84,16 +93,16 @@ HTTP Referer header value
 HTTP User\-Agent header value (default random)
 .TP
 \fB\-\-proxy\fR PROXY
-Use a proxy to connect to the target URL
+Use a proxy to connect to the target URL (protocol://host:port)
 .TP
 \fB\-\-proxy\-cred\fR PROXY_CRED
 Proxy authentication credentials (name:password)
 .TP
 \fB\-\-timeout\fR TIMEOUT
-Seconds to wait before timeout connection (default 30)
+Seconds to wait before timeout connection (default 10)
 .TP
 \fB\-\-retry\fR RETRY
-Time out retrials times
+Time out retrials times (default 0)
 .TP
 \fB\-\-delay\fR DELAY
 Delay between two request of one thread
@@ -102,13 +111,22 @@ Delay between two request of one thread
 Extra headers (e.g. "key1: value1\enkey2: value2")
 .SS "Account:"
 .IP
-Telnet404, Shodan, CEye, Fofa account options
+Account options
 .TP
-\fB\-\-login\-user\fR LOGIN_USER
-Telnet404 login user
+\fB\-\-ceye\-token\fR CEYE_TOKEN
+CEye token
 .TP
-\fB\-\-login\-pass\fR LOGIN_PASS
-Telnet404 login password
+\fB\-\-oob\-server\fR OOB_SERVER
+Interactsh server to use (default "interact.sh")
+.TP
+\fB\-\-oob\-token\fR OOB_TOKEN
+Authentication token to connect protected interactsh server
+.TP
+\fB\-\-seebug\-token\fR SEEBUG_TOKEN
+Seebug token
+.TP
+\fB\-\-zoomeye\-token\fR ZOOMEYE_TOKEN
+ZoomEye token
 .TP
 \fB\-\-shodan\-token\fR SHODAN_TOKEN
 Shodan token
@@ -122,6 +140,9 @@ fofa token
 \fB\-\-quake\-token\fR QUAKE_TOKEN
 quake token
 .TP
+\fB\-\-hunter\-token\fR HUNTER_TOKEN
+hunter token
+.TP
 \fB\-\-censys\-uid\fR CENSYS_UID
 Censys uid
 .TP
@@ -129,7 +150,7 @@ Censys uid
 Censys secret
 .SS "Modules:"
 .IP
-Modules (Seebug, Zoomeye, CEye, Fofa, Listener) options
+Modules options
 .TP
 \fB\-\-dork\fR DORK
 Zoomeye dork used for search
@@ -140,17 +161,23 @@ Zoomeye dork used for search
 \fB\-\-dork\-shodan\fR DORK_SHODAN
 Shodan dork used for search
 .TP
-\fB\-\-dork\-censys\fR DORK_CENSYS
-Censys dork used for search
-.TP
 \fB\-\-dork\-fofa\fR DORK_FOFA
 Fofa dork used for search
+.TP
+\fB\-\-dork\-quake\fR DORK_QUAKE
+Quake dork used for search
+.TP
+\fB\-\-dork\-hunter\fR DORK_HUNTER
+Hunter dork used for search
+.TP
+\fB\-\-dork\-censys\fR DORK_CENSYS
+Censys dork used for search
 .TP
 \fB\-\-max\-page\fR MAX_PAGE
 Max page used in search API
 .TP
 \fB\-\-search\-type\fR SEARCH_TYPE
-search type used in ZoomEye API, web or host
+search type used in search API, web or host
 .TP
 \fB\-\-vul\-keyword\fR VUL_KEYWORD
 Seebug keyword used for search
@@ -176,6 +203,9 @@ Whether dork is in base64 format
 .IP
 Optimization options
 .TP
+\fB\-o\fR OUTPUT_PATH, \fB\-\-output\fR OUTPUT_PATH
+Output file to write (JSON Lines format)
+.TP
 \fB\-\-plugins\fR PLUGINS
 Load plugins to execute
 .TP
@@ -183,7 +213,7 @@ Load plugins to execute
 User defined poc scripts path
 .TP
 \fB\-\-threads\fR THREADS
-Max number of concurrent network requests (default 1)
+Max number of concurrent network requests (default 150)
 .TP
 \fB\-\-batch\fR BATCH
 Automatically choose defalut choice without asking
@@ -209,6 +239,9 @@ only export request rule
 .TP
 \fB\-\-rule\-filename\fR RULE_FILENAME
 Specify the name of the export rule file
+.TP
+\fB\-\-no\-check\fR
+Disable URL protocol correction and honeypot check
 .SS "Poc options:"
 .IP
 definition options for PoC
@@ -236,7 +269,7 @@ Run poc with shell mode, if executed successfully, pocsuite will drop into inter
 \fI% pocsuite -r poc_example.py -u http://example.com/ --shell\fR
 .PP
 .br
-Using multiple threads, the default number of threads is 1.
+Using multiple threads, the default number of threads is 150.
 .PP
 .br
 \fI% pocsuite -r poc_example.py -u http://example.com/ --verify --threads 20\fR
@@ -253,13 +286,13 @@ The full documentation for
 .B pocsuite3
 is maintained at:
 .br
-.I https://github.com/knownsec/pocsuite3/blob/master/docs/USAGE.md
+.I https://pocsuite.org
 .PP
 .SH VERSION
-This manual page documents pocsuite3 version 1.8.10
+This manual page documents pocsuite3 version 2.0.5
 .SH AUTHOR
 .br
-(c) 2014-2021 by Knownsec 404 Team
+(c) 2014-present by Knownsec 404 Team
 .br
 <404-team@knownsec.com>
 .LP
@@ -271,7 +304,7 @@ redistribute this software under certain conditions. If you wish to embed
 pocsuite3 technology into proprietary software, we sell alternative licenses
 (contact 404-team@knownsec.com).
 .PP
-Manual page started by Tian Qiao
+Manual page started by 13ph03nix
 <abcnsxyz@gmail.com>
 .PP
 

@@ -1,3 +1,4 @@
+# pylint: disable=E1101
 import base64
 import hashlib
 import inspect
@@ -14,6 +15,7 @@ import time
 import collections
 import chardet
 import requests
+import urllib
 from collections import OrderedDict
 from functools import wraps
 from ipaddress import ip_address, ip_network
@@ -37,7 +39,6 @@ from pocsuite3.lib.core.settings import IPV6_ADDRESS_REGEX
 from pocsuite3.lib.core.settings import IP_ADDRESS_REGEX
 from pocsuite3.lib.core.settings import OLD_VERSION_CHARACTER
 from pocsuite3.lib.core.settings import POCSUITE_VERSION_CHARACTER
-from pocsuite3.lib.core.settings import POC_NAME_REGEX
 from pocsuite3.lib.core.settings import POC_REQUIRES_REGEX
 from pocsuite3.lib.core.settings import UNICODE_ENCODING
 from pocsuite3.lib.core.settings import URL_ADDRESS_REGEX
@@ -47,6 +48,22 @@ try:
     collectionsAbc = collections.abc
 except AttributeError:
     collectionsAbc = collections
+
+
+def urlparse(address):
+    # https://stackoverflow.com/questions/50499273/urlparse-fails-with-simple-url
+    try:
+        ip = ip_address(address)
+        if ip.version == 4:
+            return urllib.parse.urlparse(f'tcp://{address}')
+        elif ip.version == 6:
+            return urllib.parse.urlparse(f'tcp://[{address}]')
+    except ValueError:
+        pass
+
+    if not re.search(r'^[A-Za-z0-9+.\-]+://', address):
+        address = f'tcp://{address}'
+    return urllib.parse.urlparse(address)
 
 
 def read_binary(filename):
@@ -114,9 +131,9 @@ def banner():
     Function prints pocsuite banner with its version
     """
     _ = BANNER
-    if not getattr(LOGGER_HANDLER, "is_tty", False):
-        _ = clear_colors(_)
-    elif IS_WIN:
+    # if not getattr(LOGGER_HANDLER, "is_tty", False):
+    #     _ = clear_colors(_)
+    if IS_WIN:
         coloramainit()
 
     data_to_stdout(_)
@@ -154,7 +171,7 @@ def data_to_stdout(data, bold=False):
     """
     Writes text to the stdout (console) stream
     """
-    if 'quiet' not in conf or not conf.quiet:
+    if not conf.get('quiet', False):
         message = ""
 
         if isinstance(data, str):
@@ -234,18 +251,14 @@ def parse_target_url(url):
     """
     Parse target URL
     """
-    ret = url
+    try:
+        pr = urlparse(url)
+        if pr.scheme.lower() not in ['http', 'https', 'ws', 'wss']:
+            url = pr._replace(scheme='https' if str(pr.port).endswith('443') else 'http').geturl()
+    except ValueError:
+        pass
 
-    if conf.ipv6 and is_ipv6_address_format(url):
-        ret = "[" + ret + "]"
-
-    if not re.search("^http[s]*://", ret, re.I) and not re.search("^ws[s]*://", ret, re.I):
-        if re.search(":443[/]*$", ret):
-            ret = "https://" + ret
-        else:
-            ret = "http://" + ret
-
-    return ret
+    return url
 
 
 def is_url_format(value):
@@ -329,29 +342,25 @@ def get_md5(value):
 
 
 def extract_cookies(cookie):
-    cookies = dict([l.split("=", 1) for l in cookie.split("; ")])
+    cookies = dict([i.split("=", 1) for i in cookie.split("; ")])
     return cookies
 
 
-def get_file_items(filename, comment_prefix='#', unicode_=True, lowercase=False, unique=False):
+def get_file_items(filename, comment_prefix='#', unicode=True, lowercase=False, unique=False):
     ret = list() if not unique else OrderedDict()
 
     check_file(filename)
 
     try:
-        with open(filename, 'r') as f:
+        with open(filename, 'rb') as f:
             for line in f.readlines():
-                # xreadlines doesn't return unicode strings when codecs.open() is used
-                if comment_prefix and line.find(comment_prefix) != -1:
-                    line = line[:line.find(comment_prefix)]
-
                 line = line.strip()
+                if unicode:
+                    encoding = chardet.detect(line)['encoding'] or 'utf-8'
+                    line = line.decode(encoding)
 
-                if not unicode_:
-                    try:
-                        line = str.encode(line)
-                    except UnicodeDecodeError:
-                        continue
+                if comment_prefix and line.startswith(comment_prefix):
+                    continue
 
                 if line:
                     if lowercase:
@@ -374,38 +383,79 @@ def get_file_items(filename, comment_prefix='#', unicode_=True, lowercase=False,
     return ret if not unique else ret.keys()
 
 
-def parse_target(address):
-    target = None
-    if is_domain_format(address) \
-            or is_url_format(address) \
-            or is_ip_address_with_port_format(address):
-        target = address
-
-    elif is_ipv6_url_format(address):
-        conf.ipv6 = True
-        target = address
-
-    elif is_ip_address_format(address):
+def parse_target(address, additional_ports=[], skip_target_port=False):
+    # parse IPv4/IPv6 CIDR
+    targets = OrderedSet()
+    try:
+        hosts = list(ip_network(address, strict=False).hosts())
+        '''
+        fix https://github.com/knownsec/pocsuite3/issues/319
+        different python versions have different behaviors on ipaddress library
+        '''
         try:
-            ip = ip_address(address)
-            target = ip.exploded
+            t = ip_address(address.replace('/32', '').replace('/128', ''))
+            if t not in hosts:
+                hosts.append(t)
         except ValueError:
             pass
-    else:
-        if is_ipv6_address_format(address):
-            conf.ipv6 = True
-            try:
-                ip = ip_address(address)
-                target = ip.exploded
-            except ValueError:
-                try:
-                    network = ip_network(address, strict=False)
-                    for host in network.hosts():
-                        target = host.exploded
-                except ValueError:
-                    pass
 
-    return target
+        for ip in hosts:
+
+            if ip.version == 6:
+                conf.ipv6 = True
+
+            if not skip_target_port:
+                targets.add(str(ip))
+
+            for probe in additional_ports:
+                probe = str(probe)
+                # [proto:]port
+                scheme, port = '', probe
+                if len(probe.split(':')) == 2:
+                    scheme, port = probe.split(':')
+
+                if scheme:
+                    targets.add(f'{scheme}://[{ip}]:{port}' if conf.get('ipv6', False) else f'{scheme}://{ip}:{port}')
+                else:
+                    targets.add(f'[{ip}]:{port}' if conf.get('ipv6', False) else f'{ip}:{port}')
+
+        return targets
+
+    except ValueError:
+        pass
+
+    # URL
+    try:
+        if ip_address(urlparse(address).hostname).version == 6:
+            conf.ipv6 = True
+    except ValueError:
+        pass
+
+    if not skip_target_port:
+        targets.add(address)
+
+    try:
+        pr = urlparse(address)
+        for probe in additional_ports:
+            probe = str(probe)
+            # [proto:]port
+            scheme, port = '', probe
+            if len(probe.split(':')) == 2:
+                scheme, port = probe.split(':')
+
+            netloc = f'[{pr.hostname}]:{port}' if conf.get('ipv6', False) else f'{pr.hostname}:{port}'
+            t = pr._replace(netloc=netloc)
+            if scheme:
+                t = t._replace(scheme=scheme)
+
+            t = t.geturl()
+            if t.startswith('tcp://'):
+                t = t.lstrip('tcp://')
+            targets.add(t)
+    except ValueError:
+        pass
+
+    return targets
 
 
 def single_time_log_message(message, level=logging.INFO, flag=None):
@@ -454,7 +504,7 @@ def get_local_ip(all=True):
     """Fetches all the local network address
     """
     ips = OrderedSet()
-    wan_ipv4 = get_host_ip()
+    wan_ipv4 = get_host_ip(check_private=False)
     ips.add(wan_ipv4)
     if not all:
         return list(ips)
@@ -485,7 +535,7 @@ def get_local_ip(all=True):
     return list(ips)
 
 
-def get_host_ip(dst='8.8.8.8'):
+def get_host_ip(dst='8.8.8.8', check_private=True):
     """ Fetches source ipv4 address when connect to dst
 
     Args:
@@ -494,6 +544,10 @@ def get_host_ip(dst='8.8.8.8'):
     Returns:
         <str>:  source ip address
     """
+
+    # maybe docker env
+    if dst == ['127.0.0.1', 'localhost']:
+        dst = '8.8.8.8'
 
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -504,6 +558,11 @@ def get_host_ip(dst='8.8.8.8'):
     finally:
         s.close()
 
+    if check_private and ip_address(ip).is_private:
+        logger.warn(
+            f'your wan ip {mosaic(ip)} is a private ip, '
+            'there may be some issues in the next stages of exploitation'
+        )
     return ip
 
 
@@ -516,7 +575,11 @@ def get_poc_requires(code):
 
 
 def get_poc_name(code):
-    return extract_regex_result(POC_NAME_REGEX, code)
+    if re.search(r'register_poc', code):
+        return extract_regex_result(r"""(?sm)POCBase\):.*?name\s*=\s*['"](?P<result>.*?)['"]""", code)
+    elif re.search(r'matchers:\s*-', code):
+        return extract_regex_result(r"""(?sm)\s*name\s*:\s*(?P<result>[^\n]*).*matchers:""", code)
+    return ''
 
 
 def is_os_64bit():
@@ -837,7 +900,7 @@ def index_modules(modules_directory):
 
     modules = []
     for root, _, files in os.walk(modules_directory):
-        files = filter(lambda x: not x.startswith("__") and x.endswith(".py"), files)
+        files = filter(lambda x: not x.startswith("__") and x.endswith(".py") or x.endswith(".yaml"), files)
         modules.extend(map(lambda x: os.path.join(root, os.path.splitext(x)[0]), files))
 
     return modules
@@ -929,7 +992,7 @@ def check_port(ip, port):
         s.connect(sa)
         s.shutdown(2)
         return True
-    except:
+    except socket.error:
         return False
     finally:
         s.close()
@@ -961,15 +1024,43 @@ def exec_cmd(cmd, raw_data=True):
     return out_data
 
 
-def desensitization(s):
-    """ Hide sensitive information.
+def mosaic(s):
+    """ Replacing URL/IPv4/IPv6 Address with asterisk's
+
+    eg. A.B.C.D -> *.*.C.D
     """
+
     s = str(s)
-    return (
-            s[:len(s) // 4 if len(s) < 30 else 8] +
-            '***' +
-            s[len(s) * 3 // 4:]
-    )
+    if not conf.get('ppt', False):
+        return s
+
+    scheme = ''
+    t = s.split('://', 1)
+    if len(t) > 1:
+        scheme, s = f'{t[0]}://', t[1]
+
+    # URL/IPv6
+    if len(re.findall(r':', s)) >= 3:
+        t = s.split(':')
+        for i in range(1, len(t) - 2):
+            if ']' in t[i]:
+                break
+            if t[i] != '':
+                t[i] = '*'
+        s = ':'.join(t)
+
+    # URL/IPv4
+    elif len(re.findall(r'\.', s)) >= 3:
+        t = s.split('.', 4)
+        t[0] = t[1] = '*'
+        s = '.'.join(t)
+
+    elif '.' in s:
+        t = s.split('.')
+        for i in range(0, len(t) - 1):
+            t[i] = '*'
+        s = '.'.join(t)
+    return scheme + s
 
 
 def encoder_bash_payload(cmd: str) -> str:
@@ -1026,6 +1117,13 @@ class OrderedSet(collections.OrderedDict, collectionsAbc.MutableSet):
 
     def __str__(self):
         return '{%s}' % (', '.join(map(repr, self.keys())))
+
+
+def get_file_text(filepath):
+    with open(filepath, 'rb') as f:
+        content = f.read()
+        encoding = chardet.detect(content)['encoding'] or 'utf-8'
+        return content.decode(encoding)
 
 
 if __name__ == '__main__':

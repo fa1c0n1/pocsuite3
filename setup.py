@@ -21,7 +21,7 @@ long_description = (
 
 setup(
     name='pocsuite3',
-    version='1.9.2',
+    version='2.0.5',
     url='https://pocsuite.org',
     description='Open-sourced remote vulnerability testing framework.',
     long_description=long_description,
@@ -53,11 +53,16 @@ setup(
         "colorlog",
         "scapy",
         "Faker",
-        "pycryptodomex"
+        "pycryptodomex",
+        "dacite",
+        "PyYAML",
+        "lxml",
     ],
     extras_require={
         'complete': [
-            'pyOpenSSL'
+            'pyOpenSSL',
+            'jq',
+            'mmh3'
         ],
     }
 )
